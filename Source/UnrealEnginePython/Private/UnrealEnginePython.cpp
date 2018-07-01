@@ -415,6 +415,78 @@ void FUnrealEnginePythonModule::RunString(char *str)
 	Py_DECREF(eval_ret);
 }
 
+bool FUnrealEnginePythonModule::RunString(char* str, FString& Result)
+{
+    FScopePythonGIL gil;
+
+    PyObject* eval_ret = PyRun_String(str, Py_single_input, (PyObject *)main_dict, (PyObject *)local_dict);
+    if (eval_ret)
+    {
+        PyObject* PyResult = PyDict_GetItemString((PyObject *)main_dict, "_");
+        if (!PyResult)
+        {
+            PyErr_Clear();
+            return false;
+        }
+
+        char *msg = NULL;
+#if PY_MAJOR_VERSION >= 3
+        PyObject *zero = PyUnicode_AsUTF8String(PyObject_Str(PyResult));
+        if (zero)
+        {
+            msg = PyBytes_AsString(zero);
+        }
+#else
+        msg = PyString_AsString(PyObject_Str(PyString));
+#endif
+        if (!msg)
+        {
+            Result = TEXT("Unabe to convert result to string.");
+            PyErr_Clear();
+            return false;
+        }
+
+        Result = UTF8_TO_TCHAR(msg);
+
+        Py_DECREF(eval_ret);
+        return true;
+    }
+    else
+    {
+        PyObject *type = NULL;
+        PyObject *value = NULL;
+        PyObject *traceback = NULL;
+
+        PyErr_Fetch(&type, &value, &traceback);
+        PyErr_NormalizeException(&type, &value, &traceback);
+
+        if (!value)
+        {
+            PyErr_Clear();
+            return false;
+        }
+
+        char *msg = NULL;
+#if PY_MAJOR_VERSION >= 3
+        PyObject *zero = PyUnicode_AsUTF8String(PyObject_Str(value));
+        if (zero)
+        {
+            msg = PyBytes_AsString(zero);
+        }
+#else
+        msg = PyString_AsString(PyObject_Str(value));
+#endif
+        if (!msg)
+        {
+            PyErr_Clear();
+            return false;
+        }
+
+        Result = UTF8_TO_TCHAR(msg);
+        return false;
+    }
+}
+
 FString FUnrealEnginePythonModule::Pep8ize(FString Code)
 {
 	FScopePythonGIL gil;

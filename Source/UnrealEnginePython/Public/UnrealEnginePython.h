@@ -103,6 +103,8 @@ public:
 	void RunString(char *);
 	void RunFile(char *);
 
+    bool RunString(char *, FString& Result);
+
 	void UESetupPythonInterpreter(bool);
 
 	TArray<FString> ScriptsPaths;
