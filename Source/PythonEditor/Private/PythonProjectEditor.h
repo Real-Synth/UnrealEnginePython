@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "WorkflowCentricApplication.h"
+#include "Editor/Kismet/Public/WorkflowOrientedApp/WorkflowCentricApplication.h"
 #include "Editor/Kismet/Public/WorkflowOrientedApp/WorkflowTabManager.h"
 #include "Runtime/Launch/Resources/Version.h"
 
@@ -62,6 +62,10 @@ public:
 
 	bool Execute();
 
+#if PLATFORM_MAC
+	bool ExecuteInMainThread();
+#endif
+
 	bool PEP8ize();
 
 	FString GetSafeName(bool IsDirectory);
@@ -80,6 +84,10 @@ private:
 	void SaveAll_Internal();
 
 	void Execute_Internal();
+
+#if PLATFORM_MAC
+	void ExecuteInMainThread_Internal();
+#endif
 
 	void PEP8ize_Internal();
 

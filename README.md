@@ -30,7 +30,7 @@ Once the plugin is installed and enabled, you get access to the 'PythonConsole' 
 
 All of the exposed engine features are under the 'unreal_engine' virtual module (it is completely coded in c into the plugin, so do not expect to run 'import unreal_engine' from a standard python shell)
 
-The currently supported Unreal Engine versions are 4.12, 4.13, 4.14, 4.15, 4.16, 4.17, 4.18 and 4.19
+The currently supported Unreal Engine versions are 4.12, 4.13, 4.14, 4.15, 4.16, 4.17, 4.18, 4.19 and 4.20
 
 We support official python.org releases as well as IntelPython and Anaconda distributions.
 
@@ -165,9 +165,14 @@ Just remove the .so files in Plugins/UnrealEnginePython/Binaries/Linux and pull 
 
 At the next run the build procedure wil be started again.
 
+Android Deployment
+------------------
+
+Check https://github.com/20tab/UnrealEnginePython/blob/master/docs/Android.md
+
 # Installation on other platforms
 
-Currently only Windows, MacOSX and Linux are supported. We are investigating Android support too via the kivy project.
+Currently only Windows, MacOSX, Linux and Android are supported.
 
 # Using Python with Unreal Engine (finally)
 
@@ -473,8 +478,6 @@ if is_hitting_something:
     ue.log(hit_result)
 ```
 
-Remember that structs are passed by value (not by ref like UObject's), so a dedicated unreal_engine.UScriptStruct python class is exposed.
-
 To create a new struct instance you can do:
 
 ```python
@@ -495,29 +498,6 @@ To access the fields of a struct just call the fields() method.
 
 A good example of struct usage is available here: https://github.com/20tab/UnrealEnginePython/blob/master/docs/Settings.md
 
-As structs are passed by value, you need to pay attention when manipulating structs fields that are structs by themselves:
-
-```python
-from unreal_engine.structs import TerrificStruct, DumbStruct
-
-ts = TerrificStruct()
-ts.dumb = DumbStruct(Foo=17, Bar=22)
-
-# will not modify the original DumbStruct but a copy of it !!!
-ts.dumb.Foo = 22
-```
-
-You can eventually force structs to be passed by ref (extremely dangerous as the internal C pointer could be a dangling one) using the ref() function:
-
-```python
-from unreal_engine.structs import TerrificStruct, DumbStruct
-
-ts = TerrificStruct()
-ts.dumb = DumbStruct(Foo=17, Bar=22)
-
-# ref() will return a pointer to a struct
-ts.ref().dumb.foo().Foo = 22
-```
 
 More details here: https://github.com/20tab/UnrealEnginePython/blob/master/docs/MemoryManagement.md
 
@@ -797,7 +777,7 @@ Pay attention to not call app.exec_() as it will result in Qt taking control of 
 
 ```python
 
-# save is as ueqt.py
+# save it as ueqt.py
 import sys
 import unreal_engine as ue
 import PySide2
@@ -855,9 +835,13 @@ widget = MyWidget()
 widget.resize(800, 600)
 widget.show()
 
+root_window = ue.get_editor_window()
+root_window.set_as_owner(widget.winId())
 ```
 
 (no need to allocate a new Qt app, or start it, as the UE4 Editor, thanks to to ueqt module is now the Qt app itself)
+
+Note the 2 final lines: they 'attach' the Qt window as a 'child' of the editor root window. Note that on windows platform this is not simple parenting but 'ownership'.
 
 Memory management
 -----------------
@@ -902,7 +886,7 @@ Sometimes you may have a UObject and know that it is backed by a python object. 
    
 This would be resolved as shown below:
 
-```
+```python
 import unreal_engine as ue
 
 class Explosive:
@@ -950,3 +934,4 @@ Such a big project requires constant sponsorship, special thanks go to:
 
 * GoodTH.INC https://www.goodthinc.com/ (they are sponsoring the sequencer api)
 
+* Quixel AB https://megascans.se/ (built their integration tool over UnrealEnginePython giving us tons of useful feedbacks and ideas)

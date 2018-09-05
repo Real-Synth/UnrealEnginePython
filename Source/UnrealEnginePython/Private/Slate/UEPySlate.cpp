@@ -108,12 +108,14 @@
 
 #include "Runtime/Core/Public/Misc/Attribute.h"
 #include "Runtime/Slate/Public/Framework/Application/SlateApplication.h"
+#include "Runtime/SlateCore/Public/Styling/SlateStyleRegistry.h"
+#include "Runtime/Slate/Public/Framework/Commands/Commands.h"
 
 FReply FPythonSlateDelegate::OnMouseEvent(const FGeometry &geometry, const FPointerEvent &pointer_event)
 {
 	FScopePythonGIL gil;
 
-	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"OO", py_ue_new_fgeometry(geometry), py_ue_new_fpointer_event(pointer_event));
+	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"NN", py_ue_new_fgeometry(geometry), py_ue_new_fpointer_event(pointer_event));
 	if (!ret)
 	{
 		unreal_engine_py_log_error();
@@ -133,7 +135,7 @@ FReply FPythonSlateDelegate::OnKeyDown(const FGeometry &geometry, const FKeyEven
 {
 	FScopePythonGIL gil;
 
-	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"OO", py_ue_new_fgeometry(geometry), py_ue_new_fkey_event(key_event));
+	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"NN", py_ue_new_fgeometry(geometry), py_ue_new_fkey_event(key_event));
 	if (!ret)
 	{
 		unreal_engine_py_log_error();
@@ -251,7 +253,7 @@ void FPythonSlateDelegate::OnLinearColorChanged(FLinearColor color)
 {
 	FScopePythonGIL gil;
 
-	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"O", py_ue_new_flinearcolor(color));
+	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"N", py_ue_new_flinearcolor(color));
 	if (!ret)
 	{
 		unreal_engine_py_log_error();
@@ -264,7 +266,7 @@ void FPythonSlateDelegate::OnWindowClosed(const TSharedRef<SWindow> &Window)
 {
 	FScopePythonGIL gil;
 
-	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"O", py_ue_new_swidget<ue_PySWindow>(StaticCastSharedRef<SWidget>(Window), &ue_PySWindowType));
+	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"N", py_ue_new_swidget<ue_PySWindow>(StaticCastSharedRef<SWidget>(Window), &ue_PySWindowType));
 	if (!ret)
 	{
 		unreal_engine_py_log_error();
@@ -317,7 +319,7 @@ void FPythonSlateDelegate::OnAssetDoubleClicked(const FAssetData& AssetData)
 {
 	FScopePythonGIL gil;
 
-	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"O", py_ue_new_fassetdata(AssetData));
+	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"N", py_ue_new_fassetdata(AssetData));
 	if (!ret)
 	{
 		unreal_engine_py_log_error();
@@ -329,7 +331,7 @@ void FPythonSlateDelegate::OnAssetSelected(const FAssetData& AssetData)
 {
 	FScopePythonGIL gil;
 
-	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"O", py_ue_new_fassetdata(AssetData));
+	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"N", py_ue_new_fassetdata(AssetData));
 	if (!ret)
 	{
 		unreal_engine_py_log_error();
@@ -341,7 +343,7 @@ void FPythonSlateDelegate::OnAssetChanged(const FAssetData& AssetData)
 {
 	FScopePythonGIL gil;
 
-	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"O", py_ue_new_fassetdata(AssetData));
+	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"N", py_ue_new_fassetdata(AssetData));
 	if (!ret)
 	{
 		unreal_engine_py_log_error();
@@ -353,7 +355,7 @@ bool FPythonSlateDelegate::OnShouldFilterAsset(const FAssetData& AssetData)
 {
 	FScopePythonGIL gil;
 
-	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"O", py_ue_new_fassetdata(AssetData));
+	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"N", py_ue_new_fassetdata(AssetData));
 	if (!ret)
 	{
 		unreal_engine_py_log_error();
@@ -405,7 +407,7 @@ void FPythonSlateDelegate::MenuPyAssetBuilder(FMenuBuilder &Builder, TArray<FAss
 		PyList_Append(py_list, py_ue_new_fassetdata(asset));
 	}
 
-	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"OO", py_ue_new_fmenu_builder(Builder), py_list);
+	PyObject *ret = PyObject_CallFunction(py_callable, (char *)"NO", py_ue_new_fmenu_builder(Builder), py_list);
 	if (!ret)
 	{
 		unreal_engine_py_log_error();
@@ -1027,7 +1029,7 @@ public:
 	void MenuPyBuilder(FMenuBuilder &Builder)
 	{
 		FScopePythonGIL gil;
-		PyObject *ret = PyObject_CallFunction(py_callable, (char *)"O", py_ue_new_fmenu_builder(Builder));
+		PyObject *ret = PyObject_CallFunction(py_callable, (char *)"N", py_ue_new_fmenu_builder(Builder));
 		if (!ret)
 		{
 			unreal_engine_py_log_error();
@@ -1045,7 +1047,7 @@ public:
 	void ToolBarBuilder(FToolBarBuilder &Builder)
 	{
 		FScopePythonGIL gil;
-		PyObject *ret = PyObject_CallFunction(py_callable, (char *)"O", py_ue_new_ftool_bar_builder(Builder));
+		PyObject *ret = PyObject_CallFunction(py_callable, (char *)"N", py_ue_new_ftool_bar_builder(Builder));
 		if (!ret)
 		{
 			unreal_engine_py_log_error();
@@ -1189,7 +1191,7 @@ PyObject *py_unreal_engine_create_structure_detail_view(PyObject *self, PyObject
 	{
 		Py_INCREF(ue_py_struct);
 		ret->ue_py_struct = ue_py_struct;
-		struct_scope = MakeShared<FStructOnScope>(ue_py_struct->u_struct, ue_py_struct->data);
+		struct_scope = MakeShared<FStructOnScope>(ue_py_struct->u_struct, ue_py_struct->u_struct_ptr);
 	}
 
 	FPropertyEditorModule& PropertyEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
@@ -1489,7 +1491,7 @@ PyObject * py_unreal_engine_create_wrapper_from_pyswidget(PyObject *self, PyObje
 
 	FPythonSWidgetWrapper py_swidget_wrapper;
 	py_swidget_wrapper.Widget = Widget;
-	return py_ue_new_uscriptstruct(FPythonSWidgetWrapper::StaticStruct(), (uint8 *)&py_swidget_wrapper);
+	return py_ue_new_owned_uscriptstruct(FPythonSWidgetWrapper::StaticStruct(), (uint8 *)&py_swidget_wrapper);
 }
 
 PyObject *py_unreal_engine_open_color_picker(PyObject *self, PyObject *args, PyObject *kwargs)

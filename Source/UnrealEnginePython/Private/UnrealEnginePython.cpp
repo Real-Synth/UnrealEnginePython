@@ -20,11 +20,26 @@
 #define PROJECT_CONTENT_DIR FPaths::GameContentDir()
 #endif
 
+#if PLATFORM_MAC
+#include "Runtime/Core/Public/Mac/CocoaThread.h"
+#endif
+
 void unreal_engine_init_py_module();
 void init_unreal_engine_builtin();
 
-#if defined(UNREAL_ENGINE_PYTHON_ON_LINUX)
+#if PLATFORM_LINUX
 const char *ue4_module_options = "linux_global_symbols";
+#endif
+
+#include "Runtime/Core/Public/Misc/CommandLine.h"
+#include "Runtime/Core/Public/Misc/ConfigCacheIni.h"
+#include "Runtime/Core/Public/GenericPlatform/GenericPlatformFile.h"
+
+#include "Runtime/Core/Public/HAL/FileManagerGeneric.h"
+
+#if PLATFORM_ANDROID
+#include "Android/AndroidJNI.h"
+#include "Android/AndroidApplication.h"
 #endif
 
 
@@ -76,13 +91,38 @@ bool PyUnicodeOrString_Check(PyObject *py_obj)
 
 void FUnrealEnginePythonModule::UESetupPythonInterpreter(bool verbose)
 {
+	const TCHAR* CommandLine = FCommandLine::GetOriginal();
+	const SIZE_T CommandLineSize = FCString::Strlen(CommandLine) + 1;
+	TCHAR* CommandLineCopy = new TCHAR[CommandLineSize];
+	FCString::Strcpy(CommandLineCopy, CommandLineSize, CommandLine);
+	const TCHAR* ParsedCmdLine = CommandLineCopy;
+
+	TArray<FString> Args;
+	for (;;)
+	{
+		FString Arg = FParse::Token(ParsedCmdLine, 0);
+		if (Arg.Len() <= 0)
+			break;
+		Args.Add(Arg);
+	}
 
 #if PY_MAJOR_VERSION >= 3
-	wchar_t *argv[] = { UTF8_TO_TCHAR("UnrealEngine"), NULL };
+	wchar_t **argv = (wchar_t **)FMemory::Malloc(sizeof(wchar_t *) * (Args.Num() + 1));
 #else
-	char *argv[] = { (char *)"UnrealEngine", NULL };
+	char **argv = (char **)FMemory::Malloc(sizeof(char *) * (Args.Num() + 1));
 #endif
-	PySys_SetArgv(1, argv);
+	argv[Args.Num()] = nullptr;
+
+	for (int32 i = 0; i < Args.Num(); i++)
+	{
+#if PY_MAJOR_VERSION >= 3
+		argv[i] = (wchar_t *)(*Args[i]);
+#else
+		argv[i] = TCHAR_TO_UTF8(*Args[i]);
+#endif
+	}
+
+	PySys_SetArgv(Args.Num(), argv);
 
 	unreal_engine_init_py_module();
 
@@ -190,9 +230,9 @@ FAutoConsoleCommand ExecPythonStringCommand(
 	*NSLOCTEXT("UnrealEnginePython", "CommandText_Cmd", "Execute python string").ToString(),
 	FConsoleCommandWithArgsDelegate::CreateStatic(consoleExecString));
 
+
 void FUnrealEnginePythonModule::StartupModule()
 {
-
 	BrutalFinalize = false;
 
 	// This code will execute after your module is loaded into memory; the exact timing is specified in the .uplugin file per-module
@@ -291,6 +331,12 @@ void FUnrealEnginePythonModule::StartupModule()
 		{
 			ScriptsPaths.Add(PluginScriptsPath);
 		}
+
+		// allows third parties to include their code in the main plugin directory
+		if (plugin->GetName() == "UnrealEnginePython")
+		{
+			ScriptsPaths.Add(plugin->GetBaseDir());
+		}
 	}
 #endif
 
@@ -338,8 +384,57 @@ void FUnrealEnginePythonModule::StartupModule()
 		FPlatformMisc::SetEnvironmentVar(TEXT("PATH"), *ModifiedPath);
 	}
 
+
+
 #if PY_MAJOR_VERSION >= 3
 	init_unreal_engine_builtin();
+#if PLATFORM_ANDROID
+	extern FString GOBBFilePathBase;
+	extern FString GFilePathBase;
+	extern FString GExternalFilePath;
+	extern FString GPackageName;
+	extern int32 GAndroidPackageVersion;
+	FString OBBDir1 = GOBBFilePathBase + FString(TEXT("/Android/obb/") + GPackageName);
+	FString OBBDir2 = GOBBFilePathBase + FString(TEXT("/obb/") + GPackageName);
+	FString MainOBBName = FString::Printf(TEXT("main.%d.%s.obb"), GAndroidPackageVersion, *GPackageName);
+	FString PatchOBBName = FString::Printf(TEXT("patch.%d.%s.obb"), GAndroidPackageVersion, *GPackageName);
+	FString UnrealEnginePython_OBBPath;
+	if (FPaths::FileExists(*(OBBDir1 / MainOBBName)))
+	{
+		UnrealEnginePython_OBBPath = OBBDir1 / MainOBBName / FApp::GetProjectName() / FString(TEXT("Content/Scripts"));
+	}
+	else if (FPaths::FileExists(*(OBBDir2 / MainOBBName)))
+	{
+		UnrealEnginePython_OBBPath = OBBDir2 / MainOBBName / FApp::GetProjectName() / FString(TEXT("Content/Scripts"));
+	}
+	if (FPaths::FileExists(*(OBBDir1 / PatchOBBName)))
+	{
+		UnrealEnginePython_OBBPath = OBBDir1 / PatchOBBName / FApp::GetProjectName() / FString(TEXT("Content/Scripts"));
+	}
+	else if (FPaths::FileExists(*(OBBDir2 / PatchOBBName)))
+	{
+		UnrealEnginePython_OBBPath = OBBDir1 / PatchOBBName / FApp::GetProjectName() / FString(TEXT("Content/Scripts"));
+	}
+
+	if (!UnrealEnginePython_OBBPath.IsEmpty())
+	{
+		ScriptsPaths.Add(UnrealEnginePython_OBBPath);
+	}
+
+	FString FinalPath = GFilePathBase / FString("UE4Game") / FApp::GetProjectName() / FApp::GetProjectName() / FString(TEXT("Content/Scripts"));
+	ScriptsPaths.Add(FinalPath);
+
+	FString BasePythonPath = FinalPath / FString(TEXT("stdlib.zip")) + FString(":") + FinalPath;
+
+	if (!UnrealEnginePython_OBBPath.IsEmpty())
+	{
+		BasePythonPath += FString(":") + UnrealEnginePython_OBBPath;
+	}
+
+	UE_LOG(LogPython, Warning, TEXT("Setting Base Path to %s"), *BasePythonPath);
+
+	Py_SetPath(Py_DecodeLocale(TCHAR_TO_UTF8(*BasePythonPath), NULL));
+#endif
 #endif
 
 	Py_Initialize();
@@ -409,11 +504,33 @@ void FUnrealEnginePythonModule::RunString(char *str)
 	PyObject *eval_ret = PyRun_String(str, Py_file_input, (PyObject *)main_dict, (PyObject *)local_dict);
 	if (!eval_ret)
 	{
+		if (PyErr_ExceptionMatches(PyExc_SystemExit))
+		{
+			PyErr_Clear();
+			return;
+		}
 		unreal_engine_py_log_error();
 		return;
 	}
 	Py_DECREF(eval_ret);
 }
+
+#if PLATFORM_MAC
+void FUnrealEnginePythonModule::RunStringInMainThread(char *str)
+{
+	MainThreadCall(^{
+	RunString(str);
+		});
+}
+
+void FUnrealEnginePythonModule::RunFileInMainThread(char *filename)
+{
+	MainThreadCall(^{
+	RunFile(filename);
+		});
+}
+#endif
+
 
 bool FUnrealEnginePythonModule::RunString(char* str, FString& Result)
 {
@@ -517,7 +634,7 @@ FString FUnrealEnginePythonModule::Pep8ize(FString Code)
 		return Code;
 	}
 
-	if (!PyUnicode_Check(ret))
+	if (!PyUnicodeOrString_Check(ret))
 	{
 		UE_LOG(LogPython, Error, TEXT("returned value is not a string"));
 		// return the original string to avoid losing data
@@ -536,12 +653,13 @@ void FUnrealEnginePythonModule::RunFile(char *filename)
 {
 	FScopePythonGIL gil;
 	FString full_path = UTF8_TO_TCHAR(filename);
+	FString original_path = full_path;
 	bool foundFile = false;
 	if (!FPaths::FileExists(filename))
 	{
 		for (FString ScriptsPath : ScriptsPaths)
 		{
-			full_path = FPaths::Combine(*ScriptsPath, full_path);
+			full_path = FPaths::Combine(*ScriptsPath, original_path);
 			if (FPaths::FileExists(full_path))
 			{
 				foundFile = true;
@@ -582,6 +700,11 @@ void FUnrealEnginePythonModule::RunFile(char *filename)
 	fclose(fd);
 	if (!eval_ret)
 	{
+		if (PyErr_ExceptionMatches(PyExc_SystemExit))
+		{
+			PyErr_Clear();
+			return;
+		}
 		unreal_engine_py_log_error();
 		return;
 	}
@@ -592,9 +715,14 @@ void FUnrealEnginePythonModule::RunFile(char *filename)
 	PyObject *eval_ret = PyRun_String(TCHAR_TO_UTF8(*command), Py_file_input, (PyObject *)main_dict, (PyObject *)local_dict);
 	if (!eval_ret)
 	{
+		if (PyErr_ExceptionMatches(PyExc_SystemExit))
+		{
+			PyErr_Clear();
+			return;
+		}
 		unreal_engine_py_log_error();
 		return;
-}
+	}
 #endif
 
 }

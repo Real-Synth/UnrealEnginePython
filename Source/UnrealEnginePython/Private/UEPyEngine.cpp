@@ -21,6 +21,12 @@
 
 #include "Runtime/Launch/Public/LaunchEngineLoop.h"
 
+#if PLATFORM_MAC
+#include "Runtime/Core/Public/Mac/CocoaThread.h"
+#endif
+
+#include "Runtime/Slate/Public/Framework/Application/SlateApplication.h"
+#include "Runtime/CoreUObject/Public/UObject/UObjectIterator.h"
 
 PyObject *py_unreal_engine_log(PyObject * self, PyObject * args)
 {
@@ -311,10 +317,25 @@ PyObject *py_unreal_engine_unload_package(PyObject * self, PyObject * args)
 	FText outErrorMsg;
 	if (!PackageTools::UnloadPackages({ packageToUnload }, outErrorMsg))
 	{
-		return PyErr_Format(PyExc_Exception, TCHAR_TO_UTF8(*outErrorMsg.ToString()));
+		return PyErr_Format(PyExc_Exception, "%s", TCHAR_TO_UTF8(*outErrorMsg.ToString()));
 	}
 
 	Py_RETURN_NONE;
+}
+
+PyObject *py_unreal_engine_get_package_filename(PyObject * self, PyObject * args)
+{
+	char *name;
+	if (!PyArg_ParseTuple(args, "s:get_package_filename", &name))
+	{
+		return NULL;
+	}
+
+	FString Filename;
+	if (!FPackageName::DoesPackageExist(FString(UTF8_TO_TCHAR(name)), nullptr, &Filename))
+		return PyErr_Format(PyExc_Exception, "package does not exist");
+
+	return PyUnicode_FromString(TCHAR_TO_UTF8(*Filename));
 }
 #endif
 
@@ -446,7 +467,7 @@ PyObject *py_unreal_engine_string_to_guid(PyObject * self, PyObject * args)
 
 	if (FGuid::Parse(FString(str), guid))
 	{
-		return py_ue_new_uscriptstruct(FindObject<UScriptStruct>(ANY_PACKAGE, UTF8_TO_TCHAR((char *)"Guid")), (uint8 *)&guid);
+		return py_ue_new_owned_uscriptstruct(FindObject<UScriptStruct>(ANY_PACKAGE, UTF8_TO_TCHAR((char *)"Guid")), (uint8 *)&guid);
 	}
 
 	return PyErr_Format(PyExc_Exception, "unable to build FGuid");
@@ -457,7 +478,7 @@ PyObject *py_unreal_engine_new_guid(PyObject * self, PyObject * args)
 
 	FGuid guid = FGuid::NewGuid();
 
-	return py_ue_new_uscriptstruct(FindObject<UScriptStruct>(ANY_PACKAGE, UTF8_TO_TCHAR((char *)"Guid")), (uint8 *)&guid);
+	return py_ue_new_owned_uscriptstruct(FindObject<UScriptStruct>(ANY_PACKAGE, UTF8_TO_TCHAR((char *)"Guid")), (uint8 *)&guid);
 }
 
 PyObject *py_unreal_engine_guid_to_string(PyObject * self, PyObject * args)
@@ -703,7 +724,8 @@ PyObject *py_unreal_engine_tobject_iterator(PyObject * self, PyObject * args)
 PyObject *py_unreal_engine_create_and_dispatch_when_ready(PyObject * self, PyObject * args)
 {
 	PyObject *py_callable;
-	if (!PyArg_ParseTuple(args, "O:create_and_dispatch_when_ready", &py_callable))
+	int named_thread = (int)ENamedThreads::GameThread;
+	if (!PyArg_ParseTuple(args, "O|i:create_and_dispatch_when_ready", &py_callable, &named_thread))
 	{
 		return NULL;
 	}
@@ -712,6 +734,7 @@ PyObject *py_unreal_engine_create_and_dispatch_when_ready(PyObject * self, PyObj
 		return PyErr_Format(PyExc_TypeError, "argument is not callable");
 
 	Py_INCREF(py_callable);
+
 
 	FGraphEventRef task = FFunctionGraphTask::CreateAndDispatchWhenReady([&]() {
 		FScopePythonGIL gil;
@@ -725,15 +748,55 @@ PyObject *py_unreal_engine_create_and_dispatch_when_ready(PyObject * self, PyObj
 			unreal_engine_py_log_error();
 		}
 		Py_DECREF(py_callable);
-	}, TStatId(), nullptr, ENamedThreads::GameThread);
+	}, TStatId(), nullptr, (ENamedThreads::Type)named_thread);
 
+
+	Py_BEGIN_ALLOW_THREADS;
 	FTaskGraphInterface::Get().WaitUntilTaskCompletes(task);
+	Py_END_ALLOW_THREADS;
 	// TODO Implement signal triggering in addition to WaitUntilTaskCompletes
 	// FTaskGraphInterface::Get().TriggerEventWhenTaskCompletes
 
-	Py_INCREF(Py_None);
-	return Py_None;
+	Py_RETURN_NONE;
 }
+
+
+#if PLATFORM_MAC
+PyObject *py_unreal_engine_main_thread_call(PyObject * self, PyObject * args)
+{
+	PyObject *py_callable;
+	if (!PyArg_ParseTuple(args, "O|:main_thread_call", &py_callable))
+	{
+		return NULL;
+	}
+
+	if (!PyCallable_Check(py_callable))
+		return PyErr_Format(PyExc_TypeError, "argument is not callable");
+
+	Py_INCREF(py_callable);
+
+	Py_BEGIN_ALLOW_THREADS;
+	MainThreadCall(^{
+		FScopePythonGIL gil;
+		PyObject *ret = PyObject_CallObject(py_callable, nullptr);
+		if (ret)
+		{
+			Py_DECREF(ret);
+		}
+		else
+		{
+			unreal_engine_py_log_error();
+		}
+		Py_DECREF(py_callable);
+		});
+	Py_END_ALLOW_THREADS;
+
+	Py_RETURN_NONE;
+}
+#endif
+
+
+
 
 PyObject *py_unreal_engine_get_game_viewport_size(PyObject *self, PyObject * args)
 {
@@ -1267,7 +1330,7 @@ PyObject *py_unreal_engine_clipboard_copy(PyObject * self, PyObject * args)
 	FGenericPlatformMisc::ClipboardCopy(UTF8_TO_TCHAR(text));
 #endif
 	Py_RETURN_NONE;
-	}
+}
 
 PyObject *py_unreal_engine_clipboard_paste(PyObject * self, PyObject * args)
 {
