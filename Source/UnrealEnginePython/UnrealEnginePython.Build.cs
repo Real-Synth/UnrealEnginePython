@@ -236,6 +236,8 @@ public class UnrealEnginePython : ModuleRules
         }
         else if (Target.Platform == UnrealTargetPlatform.Linux)
         {
+            PublicIncludePaths.Add("/usr/include/");
+
             if (pythonHome == "")
             {
                 string includesPath = DiscoverLinuxPythonIncludesPath();
