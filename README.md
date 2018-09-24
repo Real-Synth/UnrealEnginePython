@@ -34,7 +34,7 @@ The currently supported Unreal Engine versions are 4.12, 4.13, 4.14, 4.15, 4.16,
 
 We support official python.org releases as well as IntelPython and Anaconda distributions.
 
-Note: this plugin has nothing to do with the experimental 'PythonScriptPlugin' included in Unreal Engine >= 4.19. We aim at full integration with engine and editor (included the Slate api), as well as support for the vast majority of python features like asyncio, coroutines, generators, threads and third party modules.
+Note: this plugin has nothing to do with the experimental 'PythonScriptPlugin' included in Unreal Engine >= 4.19. We aim at full integration with engine and editor (included the Slate api, check here: https://github.com/20tab/UnrealEnginePython/blob/master/docs/Slate_API.md), as well as support for the vast majority of python features like asyncio, coroutines, generators, threads and third party modules.
 
 # Binary installation on Windows (64 bit)
 
@@ -431,6 +431,27 @@ vec = self.uobject.GetActorLocation()
 
 Reflection based functions are those in camelcase (or with the first capital letter). Native functions instead follow the python style, with lower case, underscore-as-separator function names.
 
+Note that, in editor builds, when you change the property of an archetype (included ClassDefaultObject) via __setattr__ all of the archtype instances will be updated too.
+
+To be more clear:
+
+```python
+your_blueprint.GeneratedClass.get_cdo().CharacterMovement.MaxWalkSpeed = 600.0
+```
+
+is a super shortcut for:
+
+```python
+your_blueprint.GeneratedClass.get_cdo().CharacterMovement.pre_edit_change('MaxWalkSpeed')
+your_blueprint.GeneratedClass.get_cdo().CharacterMovement.set_property('MaxWalkSpeed', 600.0)
+your_blueprint.GeneratedClass.get_cdo().CharacterMovement.post_edit_change_property('MaxWalkSpeed')
+for instance in your_blueprint.GeneratedClass.get_cdo().CharacterMovement.get_archetype_instances():
+    instance.pre_edit_change('MaxWalkSpeed')
+    instance.set_property('MaxWalkSpeed', 600.0)
+    instance.post_edit_change_property('MaxWalkSpeed')
+```
+
+
 The automagic UClass, UStruct and UEnums mappers
 ------------------------------------------------
 
@@ -665,6 +686,7 @@ The following parameters are supported:
 * `RelativeAdditionalModulesPath`: like AdditionalModulesPath, but the path is relative to the /Content directory
 * `ZipPath`: allow to specify a .zip file that is added to sys.path
 * `RelativeZipPath`: like ZipPath, but the path is relative to the /Content directory
+* `ImportModules: comma/space/semicolon separated list of modules to import on startup (after ue_site)
 
 Example:
 
